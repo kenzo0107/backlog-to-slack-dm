@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+Description: Backlog notification to Slack DM
+
+Globals:
+  Function:
+    Timeout: 5
+
+Resources:
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      GatewayResponses:
+        UNAUTHORIZED:
+          StatusCode: 401
+          ResponseParameters:
+            Headers:
+              WWW-Authenticate: "'Basic'"
+      Auth:
+        DefaultAuthorizer: RequestAuthorizer
+        Authorizers:
+          RequestAuthorizer:
+            FunctionPayloadType: REQUEST
+            FunctionArn: !GetAtt Authorizer.Arn
+            Identity:
+              Headers:
+                - authorization
+
+  BacklogToSlackDM:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: artifact
+      Handler: backlog-to-slack-dm
+      FunctionName: backlog-to-slack-dm
+      Runtime: go1.x
+      Tracing: Active
+      VpcConfig:
+        SecurityGroupIds: # allow https from 0.0.0.0/0
+          - sg-dummy  # Replace your security group
+        SubnetIds:  # Use Private Subnet below where NatGateway is routed.
+          - subnet-0123456789abcde01  # Replace your security group
+          - subnet-0123456789abcde02  # Replace your security group
+          - subnet-0123456789abcde03  # Replace your security group
+      Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: 'backlog_api_key'
+        - SSMParameterReadPolicy:
+            ParameterName: 'slack_bot_user_oauth_access_token'
+      Environment:
+        Variables:
+          BACKLOG_BASE_URL: 'https://example.backlog.com' # Replace your backlog base url
+          BACKLOG_API_KEY_NAME: 'backlog_api_key'
+          SLACK_BOT_USER_OAUTH_ACCESS_TOKEN_NAME: 'slack_bot_user_oauth_access_token'
+          DENIED_TO_NOTIFY_MAILS: 'dislike-email@gmail.com,iloveslack@gmail.com'
+      Events:
+        Webhook:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /webhook
+            Method: POST
+  BacklogToSlackDMGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${BacklogToSlackDM}
+      RetentionInDays: 1
+
+  Authorizer:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: artifact
+      Handler: authorizer
+      FunctionName: authorizer
+      Runtime: go1.x
+      Tracing: Active
+      Environment:
+        Variables:
+          BACKLOG_BASIC_AUTH_ENC_NAME: 'backlog_basic_auth_enc'
+      Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: backlog_basic_auth_enc
+  AuthorizerGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${Authorizer}
+      RetentionInDays: 1
+
+Outputs:
+  ApiURL:
+    Description: "API URL"
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/'
