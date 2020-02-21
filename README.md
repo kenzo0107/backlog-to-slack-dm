@@ -1,8 +1,12 @@
+![img](overview.png)
+
 This SAM Project provides that builds API Gateway + Lambda that notifies Slack DM to the "user you want to notify" specified when adding a comment in a Backlog ticket.
 
-![img](step1_add_comment.png)
+add comment in Backlog
+<img width="50%" src="step1_add_comment.png">
 
-![img](step2_slack_dm.png)
+send Slack DM to "helloworld"
+<img width="50%" src="step2_slack_dm.png">
 
 ## Preparation
 
